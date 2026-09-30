@@ -167,7 +167,7 @@ _mcp_roles_private_dirs() (
             return 1
         fi
     done
-    mkdir -p -- "$@" && chmod 700 -- "$@"
+    mkdir -p -- "$@" && chmod 700 "$@"  # BSD chmod rejects -- after the mode; paths are absolute
 )
 
 # Reject malformed markers before callers replace the rc file. On uninstall,
