@@ -1,0 +1,116 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+_mcp_roles_script=${BASH_SOURCE[0]}
+while [[ -L "$_mcp_roles_script" ]]; do
+    _mcp_roles_target=$(readlink "$_mcp_roles_script")
+    case "$_mcp_roles_target" in
+        /*) _mcp_roles_script=$_mcp_roles_target ;;
+        *) _mcp_roles_script="$(dirname "$_mcp_roles_script")/$_mcp_roles_target" ;;
+    esac
+done
+_mcp_roles_root=$(cd "$(dirname "$_mcp_roles_script")/.." && pwd)
+# shellcheck source=lib/core.sh
+source "$_mcp_roles_root/lib/core.sh"
+
+usage() {
+    printf 'Usage: mcp-roles {list|show <role>|validate|doctor|path}\n'
+}
+
+case "${1:-}" in
+    list)
+        _mcp_roles_list_names
+        ;;
+    show)
+        [[ -n "${2:-}" ]] || { usage >&2; exit 2; }
+        role_file=$(_mcp_roles_role_file "$2")
+        jq . "$role_file"
+        ;;
+    validate)
+        dir=$(_mcp_roles_catalog_dir)
+        [[ -d "$dir" ]] || { printf 'Catalog not found: %s\n' "$dir" >&2; exit 1; }
+        count=0
+        bad=0
+        for role_file in "$dir"/*.json; do
+            [[ -f "$role_file" ]] || continue
+            count=$((count + 1))
+            if _mcp_roles_validate_file "$role_file"; then
+                printf 'OK %s\n' "${role_file##*/}"
+            else
+                printf 'INVALID %s\n' "${role_file##*/}" >&2
+                bad=1
+            fi
+        done
+        [[ "$count" -gt 0 ]] || { printf 'No role files in %s\n' "$dir" >&2; exit 1; }
+        exit "$bad"
+        ;;
+    doctor)
+        status=0
+        if command -v jq >/dev/null 2>&1; then
+            printf 'OK dependency jq\n'
+        else
+            printf 'MISSING dependency jq\n'
+            status=1
+        fi
+        need_codex=0
+        need_hermes=0
+        for provider in claude codex hermes muse; do
+            upper=$(printf '%s' "$provider" | tr '[:lower:]' '[:upper:]')
+            variable="MCP_ROLES_${upper}_BIN"
+            binary="${!variable:-$provider}"
+            installed=0
+            if [[ -f "$_mcp_roles_root/init.sh" ]] && grep -Fq "/providers/$provider.sh" "$_mcp_roles_root/init.sh"; then
+                installed=1
+            fi
+            if command -v "$binary" >/dev/null 2>&1; then
+                printf 'OK provider %s (%s)\n' "$provider" "$binary"
+                detected=1
+            elif [[ "$installed" -eq 1 ]]; then
+                printf 'MISSING provider %s (%s)\n' "$provider" "$binary"
+                status=1
+                detected=1
+            else
+                printf 'OPTIONAL provider %s (%s)\n' "$provider" "$binary"
+                detected=0
+            fi
+            if [[ "$detected" -eq 1 ]]; then
+                [[ "$provider" != codex ]] || need_codex=1
+                [[ "$provider" != hermes ]] || need_hermes=1
+            fi
+        done
+        if command -v yq >/dev/null 2>&1; then
+            printf 'OK dependency yq (Hermes)\n'
+        elif [[ "$need_hermes" -eq 1 ]]; then
+            printf 'MISSING dependency yq (Hermes)\n'
+            status=1
+        else
+            printf 'OPTIONAL dependency yq (Hermes only)\n'
+        fi
+        if python3 -c 'import tomllib' >/dev/null 2>&1; then
+            printf 'OK dependency python3 with tomllib (Codex)\n'
+        elif [[ "$need_codex" -eq 1 ]]; then
+            printf 'MISSING dependency Python 3.11+ (Codex)\n'
+            status=1
+        else
+            printf 'OPTIONAL dependency Python 3.11+ (Codex only)\n'
+        fi
+        dir=$(_mcp_roles_catalog_dir)
+        if [[ -d "$dir" ]]; then
+            printf 'OK catalog %s\n' "$dir"
+            if command -v jq >/dev/null 2>&1; then
+                "$0" validate || status=1
+            fi
+        else
+            printf 'MISSING catalog %s\n' "$dir"
+            status=1
+        fi
+        exit "$status"
+        ;;
+    path)
+        _mcp_roles_catalog_dir
+        ;;
+    *)
+        usage >&2
+        exit 2
+        ;;
+esac

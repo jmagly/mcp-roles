@@ -1,0 +1,22 @@
+{
+  "mcpServers": {
+    "github": {
+      "type": "http",
+      "url": "https://api.githubcopilot.com/mcp/",
+      "headers": {"Authorization": "Bearer ${GITHUB_PAT}"}
+    },
+    "context7": {
+      "type": "http",
+      "url": "https://mcp.context7.com/mcp"
+    },
+    "playwright": {
+      "command": "npx",
+      "args": ["-y", "@playwright/mcp@latest"]
+    },
+    "notion": {
+      "type": "http",
+      "url": "https://mcp.notion.com/mcp",
+      "oauth": true
+    }
+  }
+}

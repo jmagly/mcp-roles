@@ -1,0 +1,42 @@
+name: CI
+on: [push, pull_request]
+jobs:
+  test:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: |
+          if [[ "${{ runner.os }}" == "macOS" ]]; then
+            brew install jq shellcheck
+            arch=$(uname -m)
+            [[ "$arch" != x86_64 ]] || arch=amd64
+            sudo curl -fsSL "https://github.com/mikefarah/yq/releases/download/v4.47.1/yq_darwin_$arch" -o /usr/local/bin/yq
+            sudo chmod +x /usr/local/bin/yq
+          else
+            sudo apt-get update
+            sudo apt-get install -y jq shellcheck zsh
+            sudo wget -q https://github.com/mikefarah/yq/releases/download/v4.47.1/yq_linux_amd64 -O /usr/local/bin/yq
+            sudo chmod +x /usr/local/bin/yq
+          fi
+      - name: macOS system Bash is rejected with a clear hint
+        if: runner.os == 'macOS'
+        run: |
+          set +e
+          output=$(/bin/bash ./install.sh 2>&1)
+          status=$?
+          set -e
+          test "$status" -eq 1
+          [[ "$output" == *'bash 4+ or zsh required (macOS: brew install bash)'* ]]
+      - name: Shellcheck
+        run: shellcheck -x install.sh uninstall.sh bin/mcp-roles lib/*.sh providers/*.sh
+      - name: Tests
+        run: python3 -m unittest discover -s tests -v
+      - name: Tests under zsh
+        run: MCP_ROLES_TEST_SHELL=zsh python3 -m unittest discover -s tests -v
