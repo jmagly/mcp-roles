@@ -468,6 +468,9 @@ items = ["spaces and \\"quotes\\"", {nested = [1, 2]}]
         self.assertIn("providers/claude.sh", init)
         self.assertIn("providers/muse.sh", init)
         self.assertNotIn("providers/codex.sh", init)
+        # Adapters must not load (and cascade errors) when the core rejects the shell.
+        self.assertRegex(init, r"(?m)^if source .*lib/core\.sh; then$")
+        self.assertRegex(init, r"(?m)^    source .*providers/claude\.sh$")
         self.assertTrue((self.base / ".local" / "bin" / "mcp-roles").is_symlink())
         result = subprocess.run([str(self.base / ".local/bin/mcp-roles"), "list"],
                                 env=env, capture_output=True, text=True)

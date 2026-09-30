@@ -7,14 +7,14 @@ jobs:
         os: [ubuntu-latest, macos-latest]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: '3.11'
       - name: Install dependencies
         run: |
           if [[ "${{ runner.os }}" == "macOS" ]]; then
-            brew install jq shellcheck
+            brew install bash jq shellcheck zsh
             arch=$(uname -m)
             [[ "$arch" != x86_64 ]] || arch=amd64
             sudo curl -fsSL "https://github.com/mikefarah/yq/releases/download/v4.47.1/yq_darwin_$arch" -o /usr/local/bin/yq
@@ -34,9 +34,13 @@ jobs:
           set -e
           test "$status" -eq 1
           [[ "$output" == *'bash 4+ or zsh required (macOS: brew install bash)'* ]]
+      - name: Use Homebrew Bash for tests
+        if: runner.os == 'macOS'
+        run: |
+          echo "$(brew --prefix)/bin" >> "$GITHUB_PATH"
       - name: Shellcheck
         run: shellcheck -x install.sh uninstall.sh bin/mcp-roles lib/*.sh providers/*.sh
       - name: Tests
-        run: python3 -m unittest discover -s tests -v
+        run: bash --version | head -1 && python3 -m unittest discover -s tests -v
       - name: Tests under zsh
         run: MCP_ROLES_TEST_SHELL=zsh python3 -m unittest discover -s tests -v
